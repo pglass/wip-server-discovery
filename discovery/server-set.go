@@ -5,8 +5,13 @@ import (
 	"sync"
 )
 
-type ServerIPs []string
 type ServerStatus bool
+
+type ServerState struct {
+	Status   ServerStatus
+	Features map[string]bool
+	Addr     ServerAddr
+}
 
 const (
 	// We don't really know if they are healthy or unhealthy.
@@ -19,44 +24,48 @@ const (
 // It includes a bit of logic to automatically set servers healthy or not.
 type ServerSet struct {
 	lock  sync.Mutex
-	addrs map[string]ServerStatus
+	addrs map[ServerAddr]ServerState
 }
 
 func NewServerSet() *ServerSet {
 	return &ServerSet{
-		addrs: map[string]ServerStatus{},
+		addrs: map[ServerAddr]ServerState{},
 	}
 }
 
 // SetKnownHealthy sets the given addrs as healthy and all other addrs as unhealthy.
-func (s *ServerSet) SetKnownHealthy(addrs ...string) {
+func (s *ServerSet) SetKnownHealthy(addrs ...ServerAddr) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	// set all addrs to unhealthy
-	for a := range s.addrs {
-		s.addrs[a] = Unhealthy
+	for a, state := range s.addrs {
+		state.Status = Unhealthy
+		s.addrs[a] = state
 	}
 	// set the given addrs to healthy
 	for _, a := range addrs {
-		s.addrs[a] = Healthy
+		state := s.addrs[a]
+		state.Addr = a
+		state.Status = Healthy
+		s.addrs[a] = state
 	}
 }
 
 // Set marks the addr as the given status.
-func (s *ServerSet) Set(addr string, status ServerStatus) {
-	s.addrs[addr] = status
+func (s *ServerSet) Update(state ServerState) {
+	s.addrs[state.Addr] = state
 }
 
 // Get returns all addresses matching the given status.
-func (s *ServerSet) Get(status ServerStatus) ServerIPs {
+func (s *ServerSet) Get(status ServerStatus) []ServerState {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	result := []string{}
-	for addr, s := range s.addrs {
-		if s == status {
-			result = append(result, addr)
+	result := []ServerState{}
+	for _, state := range s.addrs {
+		if state.Status == status {
+			result = append(result, state)
 		}
 	}
 	return result
