@@ -15,14 +15,13 @@ func retryTimeout(ctx context.Context, interval, timeout time.Duration, fn func(
 			return nil
 		}
 
-		intervalTimer := time.After(interval)
 		// Wait for interval, timeout, or context is cancelled.
 	inner:
 		for {
 			select {
 			case <-ctx.Done():
-				return fmt.Errorf("context cancelled")
-			case <-intervalTimer:
+				return ctx.Err()
+			case <-time.After(interval):
 				break inner
 			case <-timeoutTimer:
 				return fmt.Errorf("timeout of %s reached: %w", timeout, err)
@@ -39,14 +38,13 @@ func retryForever(ctx context.Context, interval time.Duration, fn func() error) 
 			return nil
 		}
 
-		intervalTimer := time.After(interval)
 		// Wait for interval, timeout, or context is cancelled.
 	inner:
 		for {
 			select {
 			case <-ctx.Done():
-				return fmt.Errorf("context cancelled")
-			case <-intervalTimer:
+				return ctx.Err()
+			case <-time.After(interval):
 				break inner
 			}
 		}

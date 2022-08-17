@@ -2,19 +2,48 @@ package discovery
 
 import (
 	"fmt"
+	"net"
+	"net/netip"
 	"sync"
 )
 
 type ServerStatus bool
 
+type ServerAddr struct {
+	// AdddPort is useful because it can be compared, used as a map key,
+	// and has an IsValid() method. The only downside seems to be that
+	// it prints addresses in an ipv6 format (like [::ffff:172.21.0.2]:8502)
+	netip.AddrPort
+}
+
+func MakeServerAddr(addr net.IPAddr, port int) ServerAddr {
+	tcp := &net.TCPAddr{
+		IP:   addr.IP,
+		Port: port,
+		Zone: addr.Zone,
+	}
+	return ServerAddr{tcp.AddrPort()}
+}
+
+func MakeServerAddrStr(addr string, port int) (ServerAddr, error) {
+	a, err := netip.ParseAddr(addr)
+	if err != nil {
+		return ServerAddr{}, err
+	}
+	return ServerAddr{
+		netip.AddrPortFrom(a, uint16(port)),
+	}, nil
+}
+
 type ServerState struct {
-	Status   ServerStatus
-	Features map[string]bool
-	Addr     ServerAddr
+	Status ServerStatus
+	Addr   ServerAddr
 }
 
 const (
-	// We don't really know if they are healthy or unhealthy.
+	// Maybe needs a rename. We don't know that the server is healthy or not.
+	// "Healthy" really means "should we try to connect to this server?" and
+	// "Unhealthy" means "don't try connecting to this server.
 	Healthy   ServerStatus = true
 	Unhealthy              = false
 )
@@ -54,6 +83,9 @@ func (s *ServerSet) SetKnownHealthy(addrs ...ServerAddr) {
 
 // Set marks the addr as the given status.
 func (s *ServerSet) Update(state ServerState) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	s.addrs[state.Addr] = state
 }
 
